@@ -38,6 +38,8 @@ type GitMetadata struct {
 	Branch    []string
 	Tags      []string
 	Timestamp string
+	Author    string
+	CoAuthors []string
 }
 
 // Metadata performs git metadata detection on the provided directory.
@@ -92,6 +94,16 @@ func Metadata(ctx context.Context, dir string) (*GitMetadata, error) {
 		retErr = err
 		// Keep going.
 	}
+	author, err := detectGitAuthor(ctx, dir)
+	if err != nil {
+		retErr = err
+		// Keep going.
+	}
+	coAuthors, err := detectGitCoAuthors(ctx, dir)
+	if err != nil {
+		retErr = err
+		// Keep going.
+	}
 
 	relDir, isRel, err := gitRelDir(baseDir, dir)
 	if err != nil {
@@ -111,6 +123,8 @@ func Metadata(ctx context.Context, dir string) (*GitMetadata, error) {
 		Branch:    branch,
 		Tags:      tags,
 		Timestamp: timestamp,
+		Author:    author,
+		CoAuthors: coAuthors,
 	}, retErr
 }
 
@@ -253,13 +267,53 @@ func detectGitTimestamp(ctx context.Context, dir string) (string, error) {
 	cmd.Dir = dir
 	out, err := cmd.Output()
 	if err != nil {
-		return "", nil
+		return "", errors.Wrap(err, "detect git timestamp")
 	}
 	outStr := string(out)
 	if outStr == "" {
 		return "", nil
 	}
 	return strings.SplitN(outStr, "\n", 2)[0], nil
+}
+
+func detectGitAuthor(ctx context.Context, dir string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", "log", "-1", "--format=%ae")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		return "", errors.Wrap(err, "detect git author")
+	}
+	outStr := string(out)
+	if outStr == "" {
+		return "", nil
+	}
+	return strings.SplitN(outStr, "\n", 2)[0], nil
+}
+
+func detectGitCoAuthors(ctx context.Context, dir string) ([]string, error) {
+	cmd := exec.CommandContext(ctx, "git", "log", "-1", "--format=%b")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, errors.Wrap(err, "detect git co-authors")
+	}
+	coAuthors := []string{}
+	for _, s := range strings.Split(string(out), "\n") {
+		splits := strings.Split(s, " ")
+		n := len(splits)
+		if n > 2 {
+			if splits[0] == "Co-authored-by:" {
+				email := splits[n-1]
+				n = len(email)
+				if n > 2 {
+					if email[0] == '<' && email[n-1] == '>' {
+						coAuthors = append(coAuthors, email[1:(n-1)])
+					}
+				}
+			}
+		}
+	}
+	return coAuthors, nil
 }
 
 // gitRelDir returns the relative path from git root (where .git directory locates in the project)

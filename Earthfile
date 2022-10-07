@@ -1,4 +1,4 @@
-VERSION --shell-out-anywhere --use-copy-link 0.6
+VERSION --earthly-git-author-args --shell-out-anywhere --use-copy-link 0.6
 
 FROM golang:1.17-alpine3.14
 
@@ -19,6 +19,12 @@ RUN apk add --update --no-cache \
     util-linux
 
 WORKDIR /earthly
+
+who:
+    FROM alpine
+    ARG EARTHLY_GIT_AUTHOR
+    ARG EARTHLY_GIT_CO_AUTHORS
+    RUN env | grep AUTH
 
 deps:
     FROM +base
