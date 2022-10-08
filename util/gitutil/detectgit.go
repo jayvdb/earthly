@@ -140,6 +140,8 @@ func (gm *GitMetadata) Clone() *GitMetadata {
 		Branch:    gm.Branch,
 		Tags:      gm.Tags,
 		Timestamp: gm.Timestamp,
+		Author:    gm.Author,
+		CoAuthors: gm.CoAuthors,
 	}
 }
 
@@ -297,8 +299,15 @@ func detectGitCoAuthors(ctx context.Context, dir string) ([]string, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "detect git co-authors")
 	}
+	return ParseCoAuthorsFromBody(string(out)), nil
+}
+
+// ParseCoAuthorsFromBody returns a list of coauthor emails from a git body
+func ParseCoAuthorsFromBody(body string) []string {
 	coAuthors := []string{}
-	for _, s := range strings.Split(string(out), "\n") {
+	coAuthorsSeen := map[string]struct{}{}
+	for _, s := range strings.Split(body, "\n") {
+		s = strings.TrimSpace(s)
 		splits := strings.Split(s, " ")
 		n := len(splits)
 		if n > 2 {
@@ -307,13 +316,18 @@ func detectGitCoAuthors(ctx context.Context, dir string) ([]string, error) {
 				n = len(email)
 				if n > 2 {
 					if email[0] == '<' && email[n-1] == '>' {
-						coAuthors = append(coAuthors, email[1:(n-1)])
+						email = email[1:(n - 1)]
+						_, seen := coAuthorsSeen[email]
+						if !seen {
+							coAuthors = append(coAuthors, email)
+							coAuthorsSeen[email] = struct{}{}
+						}
 					}
 				}
 			}
 		}
 	}
-	return coAuthors, nil
+	return coAuthors
 }
 
 // gitRelDir returns the relative path from git root (where .git directory locates in the project)
